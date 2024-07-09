@@ -8,6 +8,9 @@ require (
 )
 
 require (
-	github.com/emersion/go-message v0.18.1
-	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/DusanKasan/parsemail v1.2.0
+	golang.org/x/net v0.6.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 )
+
+require github.com/jmespath/go-jmespath v0.4.0 // indirect

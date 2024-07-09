@@ -1,20 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/smtp"
 	"os"
-	"regexp"
 
+	"github.com/DusanKasan/parsemail"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/emersion/go-message/mail"
 )
 
 const (
@@ -22,13 +22,11 @@ const (
 	defaultToEmail   = "nobody@nobody.none"
 )
 
-func getEmailValue(emails []string, emailMap map[string]string) string {
+func getEmailValue(email string, emailMap map[string]string) string {
 	// Iterate over the emails until match a key in the map
-	for _, email := range emails {
-		value, exists := emailMap[email]
-		if exists {
-			return value
-		}
+	value, exists := emailMap[email]
+	if exists {
+		return value
 	}
 
 	// Return empty string if no key was found
@@ -38,7 +36,7 @@ func getEmailValue(emails []string, emailMap map[string]string) string {
 func HandleRequest(event events.SimpleEmailEvent) error {
 	//Init the e-mail key-value map
 	emailMapJson := os.Getenv("MAILREDIR_EMAIL_MAP")
-	fmt.Printf("emailMapJson: %v\n", emailMapJson)
+	//fmt.Printf("emailMapJson: %v\n", emailMapJson)
 	// Define a map to hold the parsed JSON
 	emailMap := make(map[string]string)
 
@@ -74,76 +72,86 @@ func HandleRequest(event events.SimpleEmailEvent) error {
 			log.Fatal(err)
 		}
 
-		//Parsing from address from FROM: header
-		fromAddress := defaultFromEmail
-		re := regexp.MustCompile(`(?m)^From: .*<(.+)>`)
-		matches := re.FindSubmatch(rawEmail)
-		if matches != nil {
-			fromAddress = string(matches[1])
-		}
-		fmt.Printf("fromAddress: %v\n", fromAddress)
+		/* 		//Parsing from address from FROM: header
+		   		fromAddress := defaultFromEmail
+		   		re := regexp.MustCompile(`(?m)^From: .*<(.+)>`)
+		   		matches := re.FindSubmatch(rawEmail)
+		   		if matches != nil {
+		   			fromAddress = string(matches[1])
+		   		}
+		   		fmt.Printf("fromAddress: %v\n", fromAddress)
+		   		if err != nil {
+		   			return fmt.Errorf("failed to parse address: %w", err)
+		   		}
+
+		   		//Parsing to address from TO: header
+		   		// Define a regex to match the "To:" field in the email
+		   		regex := regexp.MustCompile(`(?s)\nTo: ([\s\S]*?)(?:\n[^ \t\n\r]|$)`)
+		   		match := regex.FindStringSubmatch(string(rawEmail))
+		   		fmt.Printf("match: %v\n", match)
+
+		   		var emails []string
+		   		if len(match) > 1 {
+		   			toField := match[1]
+		   			// Define a regex to match the emails within angle brackets
+		   			emailRegex := regexp.MustCompile(`<([\w.-]+@[\w.-]+\.\w+)>`)
+		   			emailMatches := emailRegex.FindAllStringSubmatch(toField, -1)
+
+		   			for _, emailMatch := range emailMatches {
+		   				if len(emailMatch) > 1 {
+		   					emails = append(emails, emailMatch[1])
+		   				}
+		   			}
+		   		}
+
+		   		fmt.Printf("emails: %v\n", emails)
+		   		toAddress := getEmailValue(emails, emailMap)
+		   		if toAddress == "" {
+		   			toAddress = defaultToEmail
+		   			toAddress = os.Getenv("MAILREDIR_DEFAULT_TO")
+		   		}
+
+		   		fmt.Printf("toAddress: %v\n", toAddress) */
+
+		fmt.Printf("---MAIL PARSER---\n")
+
+		email, err := parsemail.Parse(bytes.NewReader(rawEmail)) // returns Email struct and error
 		if err != nil {
-			return fmt.Errorf("failed to parse address: %w", err)
+			return fmt.Errorf("failed to parse email: %w", err)
 		}
 
-		//Parsing to address from TO: header
-		// Define a regex to match the "To:" field in the email
-		regex := regexp.MustCompile(`(?s)\nTo: ([\s\S]*?)(?:\n[^ \t\n\r]|$)`)
-		match := regex.FindStringSubmatch(string(rawEmail))
-		fmt.Printf("match: %v\n", match)
+		fmt.Printf("email.From: %v\n", email.From)
+		fmt.Printf("email.Subject: %v\n", email.Subject)
+		fmt.Printf("email.To: %v\n", email.To)
 
-		var emails []string
-		if len(match) > 1 {
-			toField := match[1]
-			// Define a regex to match the emails within angle brackets
-			emailRegex := regexp.MustCompile(`<([\w.-]+@[\w.-]+\.\w+)>`)
-			emailMatches := emailRegex.FindAllStringSubmatch(toField, -1)
-
-			for _, emailMatch := range emailMatches {
-				if len(emailMatch) > 1 {
-					emails = append(emails, emailMatch[1])
-				}
+		toAddressSlice := []string{}
+		for _, address := range email.To {
+			fmt.Printf("address.Address: %v\n", address.Address)
+			toAddress := getEmailValue(address.Address, emailMap)
+			if toAddress != "" {
+				fmt.Printf("Matched toAddress: %v\n", toAddress)
+				toAddressSlice = append(toAddressSlice, toAddress)
 			}
 		}
 
-		fmt.Printf("emails: %v\n", emails)
-		toAddress := getEmailValue(emails, emailMap)
-		if toAddress == "" {
-			toAddress = defaultToEmail
-			toAddress = os.Getenv("MAILREDIR_DEFAULT_TO")
+		if len(toAddressSlice) == 0 {
+			toAddress := os.Getenv("MAILREDIR_DEFAULT_TO")
+			fmt.Printf("No matches, using environment variable MAILREDIR_DEFAULT_TO: %v\n", toAddress)
+			if toAddress == "" {
+				toAddress = defaultToEmail
+				fmt.Printf("No environment variable, using default e-mail address: %v\n", toAddress)
+			}
+			toAddressSlice = []string{toAddress}
 		}
 
-		fmt.Printf("toAddress: %v\n", toAddress)
-
-		fmt.Printf("---MAIL PARSER---")
-
-		mr, err := mail.CreateReader(obj.Body)
-		if err != nil {
-			log.Fatalf("unable to create mail reader, %v", err)
-		}
-
-		header := mr.Header
-		from, err := header.AddressList("From")
-
-		if err != nil {
-			log.Fatalf("unable to parse 'From' address, %v", err)
-		}
-
-		to, err := header.AddressList("To")
-		if err != nil {
-			log.Fatalf("unable to parse 'To' address, %v", err)
-		}
-
-		fmt.Printf("From: %v\n", from)
-		fmt.Printf("To: %v\n", to)
-
-		fmt.Printf("---MAIL PARSER---")
+		fmt.Printf("Final toAddressSlice: %v\n", toAddressSlice)
+		fmt.Printf("---MAIL PARSER---\n")
 
 		smtpServerHost := os.Getenv("MAILREDIR_SMTP_SERVER_HOST")
 		smtpServerPort := os.Getenv("MAILREDIR_SMTP_SERVER_PORT")
 
 		// Send the email via SMTP
-		err = smtp.SendMail(smtpServerHost+":"+smtpServerPort, nil, fromAddress, []string{toAddress}, rawEmail)
+		err = smtp.SendMail(smtpServerHost+":"+smtpServerPort, nil, email.From[0].Address, toAddressSlice, rawEmail)
 		if err != nil {
 			return fmt.Errorf("failed to send e-mail: %w", err)
 		}
