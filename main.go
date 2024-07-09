@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+
 )
 
 const (
@@ -36,7 +37,6 @@ func getEmailValue(email string, emailMap map[string]string) string {
 func HandleRequest(event events.SimpleEmailEvent) error {
 	//Init the e-mail key-value map
 	emailMapJson := os.Getenv("MAILREDIR_EMAIL_MAP")
-	//fmt.Printf("emailMapJson: %v\n", emailMapJson)
 	// Define a map to hold the parsed JSON
 	emailMap := make(map[string]string)
 
@@ -71,47 +71,6 @@ func HandleRequest(event events.SimpleEmailEvent) error {
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		/* 		//Parsing from address from FROM: header
-		   		fromAddress := defaultFromEmail
-		   		re := regexp.MustCompile(`(?m)^From: .*<(.+)>`)
-		   		matches := re.FindSubmatch(rawEmail)
-		   		if matches != nil {
-		   			fromAddress = string(matches[1])
-		   		}
-		   		fmt.Printf("fromAddress: %v\n", fromAddress)
-		   		if err != nil {
-		   			return fmt.Errorf("failed to parse address: %w", err)
-		   		}
-
-		   		//Parsing to address from TO: header
-		   		// Define a regex to match the "To:" field in the email
-		   		regex := regexp.MustCompile(`(?s)\nTo: ([\s\S]*?)(?:\n[^ \t\n\r]|$)`)
-		   		match := regex.FindStringSubmatch(string(rawEmail))
-		   		fmt.Printf("match: %v\n", match)
-
-		   		var emails []string
-		   		if len(match) > 1 {
-		   			toField := match[1]
-		   			// Define a regex to match the emails within angle brackets
-		   			emailRegex := regexp.MustCompile(`<([\w.-]+@[\w.-]+\.\w+)>`)
-		   			emailMatches := emailRegex.FindAllStringSubmatch(toField, -1)
-
-		   			for _, emailMatch := range emailMatches {
-		   				if len(emailMatch) > 1 {
-		   					emails = append(emails, emailMatch[1])
-		   				}
-		   			}
-		   		}
-
-		   		fmt.Printf("emails: %v\n", emails)
-		   		toAddress := getEmailValue(emails, emailMap)
-		   		if toAddress == "" {
-		   			toAddress = defaultToEmail
-		   			toAddress = os.Getenv("MAILREDIR_DEFAULT_TO")
-		   		}
-
-		   		fmt.Printf("toAddress: %v\n", toAddress) */
 
 		fmt.Printf("---MAIL PARSER---\n")
 
